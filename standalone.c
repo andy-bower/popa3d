@@ -103,11 +103,13 @@ static void check_access(int sock)
 #endif
 
 #if POP_OPTIONS
-int do_standalone(void)
+int do_standalone(int foreground)
+{
 #else
 int main(void)
-#endif
 {
+	int foreground = 0;
+#endif
 	int true = 1;
 	int sock, new;
 	struct sockaddr_in addr;
@@ -137,20 +139,23 @@ int main(void)
 		return log_error("listen");
 
 	chdir("/");
-	setsid();
 
-	switch (fork()) {
-	case -1:
-		return log_error("fork");
+	if (!foreground) {
+		setsid();
 
-	case 0:
-		break;
+		switch (fork()) {
+		case -1:
+			return log_error("fork");
 
-	default:
-		return 0;
+		case 0:
+			break;
+
+		default:
+			return 0;
+		}
+
+		setsid();
 	}
-
-	setsid();
 
 #if defined(_SC_CLK_TCK) || !defined(CLK_TCK)
 	min_delay = MIN_DELAY * sysconf(_SC_CLK_TCK);

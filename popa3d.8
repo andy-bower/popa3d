@@ -4,6 +4,7 @@ popa3d \- Post Office Protocol (POP3) server
 .SH SYNOPSIS
 .B popa3d
 .RB [ -D ]
+.RB [ -F ]
 .RB [ -V ]
 .SH DESCRIPTION
 .B popa3d
@@ -43,6 +44,13 @@ In this mode
 .B popa3d
 also does quite a few checks to significantly reduce the impact of
 connection flood attacks.
+.TP
+.B -F
+Foreground server mode.
+Like
+.B -D
+but staying in the foreground rather than becoming a daemon.
+This supports improved service integration with init systems.
 .TP
 .B -V
 Print version information and exit.

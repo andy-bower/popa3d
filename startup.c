@@ -15,7 +15,7 @@ extern char popa3d_version[];
 extern char popa3d_date[];
 
 /* standalone.c */
-extern int do_standalone(void);
+extern int do_standalone(int foreground);
 
 /* pop_root.c */
 extern int do_pop_startup(void);
@@ -30,7 +30,7 @@ static char *progname;
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: %s [-D] [-V]\n", progname);
+	fprintf(stderr, "Usage: %s [-D] [-F] [-V]\n", progname);
 	exit(1);
 }
 
@@ -44,14 +44,18 @@ int main(int argc, char **argv)
 {
 	int c;
 	int standalone = 0;
+	int foreground = 0;
 
 #ifndef HAVE_PROGNAME
 	if (!(progname = argv[0]))
 		progname = POP_SERVER;
 #endif
 
-	while ((c = getopt(argc, argv, "DV")) != -1) {
+	while ((c = getopt(argc, argv, "DFV")) != -1) {
 		switch (c) {
+		case 'F':
+			foreground++;
+			/* fallthrough */
 		case 'D':
 			standalone++;
 			break;
@@ -68,7 +72,7 @@ int main(int argc, char **argv)
 		usage();
 
 	if (standalone)
-		return do_standalone();
+		return do_standalone(foreground);
 
 	if (do_pop_startup()) return 1;
 	return do_pop_session();

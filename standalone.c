@@ -125,9 +125,6 @@ int main(void)
 
 	if (do_pop_startup()) return 1;
 
-	if ((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
-		return log_error("socket");
-
 	snprintf(sbuf, sizeof(sbuf), "%u", DAEMON_PORT);
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_socktype = SOCK_STREAM;

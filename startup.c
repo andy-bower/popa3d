@@ -30,6 +30,7 @@ static char *progname;
 #endif
 
 int af = AF_UNSPEC;
+int dual_stack = 0;
 
 static void usage(void)
 {
@@ -59,9 +60,14 @@ int main(int argc, char **argv)
 			standalone++;
 			break;
 		case '4':
-			af = AF_INET;
+			if (af == AF_INET6)
+				dual_stack = 1;
+			else
+				af = AF_INET;
 			break;
 		case '6':
+			if (af == AF_INET)
+				dual_stack = 1;
 			af = AF_INET6;
 			break;
 

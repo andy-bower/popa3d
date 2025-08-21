@@ -36,6 +36,7 @@ extern int log_error(char *s);
 extern int do_pop_startup(void);
 extern int do_pop_session(void);
 extern int af;
+extern int dual_stack;
 
 typedef volatile sig_atomic_t va_int;
 
@@ -110,7 +111,8 @@ int do_standalone(void)
 int main(void)
 #endif
 {
-	int true = 1;
+	int off = 0;
+	int on = 1;
 	int sock, new;
 	struct sockaddr_storage addr;
 	socklen_t addrlen;
@@ -141,16 +143,16 @@ int main(void)
 	}
 
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
-	    (void *)&true, sizeof(true))) {
+	    (void *)&on, sizeof(on))) {
 		freeaddrinfo(res);
 		return log_error("setsockopt");
 	}
 
 #ifdef IPV6_V6ONLY
 	if (res->ai_family == AF_INET6 &&
-	    af == AF_INET6 &&
+	    (af == AF_INET6 || dual_stack) &&
 	    setsockopt(sock, IPPROTO_IPV6,
-	    IPV6_V6ONLY, (void *)&true, sizeof(true))) {
+	    IPV6_V6ONLY, (void *)(dual_stack ? &off : &on), sizeof(on))) {
 		freeaddrinfo(res);
 		return log_error("setsockopt");
 	}

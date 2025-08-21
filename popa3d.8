@@ -5,6 +5,8 @@ popa3d \- Post Office Protocol (POP3) server
 .B popa3d
 .RB [ -D ]
 .RB [ -V ]
+.RB [ -4 ]
+.RB [ -6 ]
 .SH DESCRIPTION
 .B popa3d
 is a Post Office Protocol version 3 (POP3) server.
@@ -43,6 +45,23 @@ In this mode
 .B popa3d
 also does quite a few checks to significantly reduce the impact of
 connection flood attacks.
+.TP
+.B -4
+When used with
+.BR -D ,
+listen on
+.BR 0.0.0.0 .
+.TP
+.B -6
+When used with
+.BR -D ,
+listen on
+.BR :: .
+If both
+.B -4
+and
+.B -6
+are combined, listen on a dual-stack socket.
 .TP
 .B -V
 Print version information and exit.

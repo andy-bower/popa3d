@@ -29,7 +29,7 @@ extern char *__progname;
 static char *progname;
 #endif
 
-int af = AF_INET;
+int af = AF_UNSPEC;
 
 static void usage(void)
 {

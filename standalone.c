@@ -147,7 +147,9 @@ int main(void)
 	}
 
 #ifdef IPV6_V6ONLY
-	if (res->ai_family == AF_INET6 && setsockopt(sock, IPPROTO_IPV6,
+	if (res->ai_family == AF_INET6 &&
+	    af == AF_INET6 &&
+	    setsockopt(sock, IPPROTO_IPV6,
 	    IPV6_V6ONLY, (void *)&true, sizeof(true))) {
 		freeaddrinfo(res);
 		return log_error("setsockopt");

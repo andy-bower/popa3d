@@ -6,6 +6,7 @@
 
 #if POP_OPTIONS
 
+#include <sys/socket.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +28,8 @@ extern char *__progname;
 #else
 static char *progname;
 #endif
+
+int af = AF_INET;
 
 static void usage(void)
 {
@@ -50,10 +53,16 @@ int main(int argc, char **argv)
 		progname = POP_SERVER;
 #endif
 
-	while ((c = getopt(argc, argv, "DV")) != -1) {
+	while ((c = getopt(argc, argv, "DV46")) != -1) {
 		switch (c) {
 		case 'D':
 			standalone++;
+			break;
+		case '4':
+			af = AF_INET;
+			break;
+		case '6':
+			af = AF_INET6;
 			break;
 
 		case 'V':

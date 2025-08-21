@@ -15,6 +15,7 @@
 #include <syslog.h>
 #include <time.h>
 #include <errno.h>
+#include <netdb.h>
 #include <sys/times.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -34,6 +35,7 @@ int deny_severity = SYSLOG_PRI_HI;
 extern int log_error(char *s);
 extern int do_pop_startup(void);
 extern int do_pop_session(void);
+extern int af;
 
 typedef volatile sig_atomic_t va_int;
 
@@ -44,7 +46,7 @@ typedef volatile sig_atomic_t va_int;
  * information about sessions that we could have allowed to proceed.
  */
 static struct {
-	struct in_addr addr;		/* Source IP address */
+	char addr[NI_MAXHOST];		/* Source IP address */
 	volatile int pid;		/* PID of the server, or 0 for none */
 	clock_t start;			/* When the server was started */
 	clock_t log;			/* When we've last logged a failure */
@@ -110,28 +112,56 @@ int main(void)
 {
 	int true = 1;
 	int sock, new;
-	struct sockaddr_in addr;
+	struct sockaddr_storage addr;
 	socklen_t addrlen;
 	int pid;
 	struct tms buf;
 	clock_t min_delay, now, log;
 	int i, j, n;
+	struct addrinfo hints, *res;
+	char hbuf[NI_MAXHOST];
+	char sbuf[NI_MAXSERV];
+	int error;
 
 	if (do_pop_startup()) return 1;
 
 	if ((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
 		return log_error("socket");
 
-	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
-	    (void *)&true, sizeof(true)))
-		return log_error("setsockopt");
+	snprintf(sbuf, sizeof(sbuf), "%u", DAEMON_PORT);
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_family = af;
+	hints.ai_flags = AI_PASSIVE;
+	error = getaddrinfo(NULL, sbuf, &hints, &res);
+	if (error)
+		return log_error("getaddrinfo");
 
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = inet_addr(DAEMON_ADDR);
-	addr.sin_port = htons(DAEMON_PORT);
-	if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)))
+	sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+	if (sock < 0) {
+		freeaddrinfo(res);
+		return log_error("socket");
+	}
+
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
+	    (void *)&true, sizeof(true))) {
+		freeaddrinfo(res);
+		return log_error("setsockopt");
+	}
+
+#ifdef IPV6_V6ONLY
+	if (res->ai_family == AF_INET6 && setsockopt(sock, IPPROTO_IPV6,
+	    IPV6_V6ONLY, (void *)&true, sizeof(true))) {
+		freeaddrinfo(res);
+		return log_error("setsockopt");
+	}
+#endif
+
+	if (bind(sock, res->ai_addr, res->ai_addrlen)) {
+		freeaddrinfo(res);
 		return log_error("bind");
+	}
+	freeaddrinfo(res);
 
 	if (listen(sock, MAX_BACKLOG))
 		return log_error("listen");
@@ -177,6 +207,12 @@ int main(void)
 		addrlen = sizeof(addr);
 		new = accept(sock, (struct sockaddr *)&addr, &addrlen);
 
+		error = getnameinfo((struct sockaddr *)&addr, addrlen,
+		    hbuf, sizeof(hbuf), NULL, 0, NI_NUMERICHOST);
+		if (error)
+			; /* XXX */
+
+
 /*
  * I wish there were a portable way to classify errno's...  In this case,
  * it appears to be better to risk eating up the CPU on a fatal error
@@ -197,9 +233,9 @@ int main(void)
 			if (sessions[i].pid ||
 			    (sessions[i].start &&
 			    now - sessions[i].start < min_delay)) {
-				if (sessions[i].addr.s_addr ==
-				    addr.sin_addr.s_addr)
-				if (++n >= MAX_SESSIONS_PER_SOURCE) break;
+				if (strcmp(sessions[i].addr, hbuf) == 0)
+					if (++n >= MAX_SESSIONS_PER_SOURCE)
+						break;
 			} else
 			if (j < 0) j = i;
 		}
@@ -210,7 +246,7 @@ int main(void)
 			    now - sessions[i].log >= min_delay) {
 				syslog(SYSLOG_PRI_HI,
 					"%s: per source limit reached",
-					inet_ntoa(addr.sin_addr));
+					hbuf);
 				sessions[i].log = now;
 			}
 			continue;
@@ -221,7 +257,7 @@ int main(void)
 			    now < log || now - log >= min_delay) {
 				syslog(SYSLOG_PRI_HI,
 					"%s: sessions limit reached",
-					inet_ntoa(addr.sin_addr));
+					hbuf);
 				log = now;
 			}
 			continue;
@@ -229,8 +265,7 @@ int main(void)
 
 		switch ((pid = fork())) {
 		case -1:
-			syslog(SYSLOG_PRI_ERROR, "%s: fork: %m",
-				inet_ntoa(addr.sin_addr));
+			syslog(SYSLOG_PRI_ERROR, "%s: fork: %m", hbuf);
 			break;
 
 		case 0:
@@ -239,7 +274,7 @@ int main(void)
 			check_access(new);
 #endif
 			syslog(SYSLOG_PRI_LO, "Session from %s",
-				inet_ntoa(addr.sin_addr));
+				hbuf);
 			if (dup2(new, 0) < 0) return log_error("dup2");
 			if (dup2(new, 1) < 0) return log_error("dup2");
 			if (dup2(new, 2) < 0) return log_error("dup2");
@@ -247,7 +282,8 @@ int main(void)
 			return do_pop_session();
 
 		default:
-			sessions[j].addr = addr.sin_addr;
+			strlcpy(sessions[j].addr, hbuf,
+				sizeof(sessions[j].addr));
 			sessions[j].pid = pid;
 			sessions[j].start = now;
 			sessions[j].log = 0;

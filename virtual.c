@@ -40,20 +40,28 @@ int virtual_startup(void)
 	return 0;
 }
 
-static char *lookup(void)
+static const char *lookup(void)
 {
-	struct sockaddr_in sin;
+	struct sockaddr_storage ss;
 	socklen_t length;
+	int error;
+	static char hbuf[NI_MAXHOST];
 
-	length = sizeof(sin);
-	if (getsockname(0, (struct sockaddr *)&sin, &length)) {
+	length = sizeof(ss);
+	if (getsockname(0, (struct sockaddr *)&ss, &length)) {
 		if (errno == ENOTSOCK) return "";
 		log_error("getsockname");
 		return NULL;
 	}
-	if (length != sizeof(sin) || sin.sin_family != AF_INET) return NULL;
 
-	return inet_ntoa(sin.sin_addr);
+	error = getnameinfo((struct sockaddr *)&ss, length, hbuf, sizeof(hbuf),
+	    NULL, 0, NI_NUMERICHOST);
+	if (error) {
+		/* logging? */
+		return NULL;
+	}
+
+	return hbuf;
 }
 
 static int is_valid_user(char *user)

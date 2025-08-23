@@ -41,7 +41,7 @@ int virtual_startup(void)
 	return 0;
 }
 
-static const char *lookup(void)
+static char *lookup(void)
 {
 	struct sockaddr_storage ss;
 	socklen_t length;
@@ -50,7 +50,10 @@ static const char *lookup(void)
 
 	length = sizeof(ss);
 	if (getsockname(0, (struct sockaddr *)&ss, &length)) {
-		if (errno == ENOTSOCK) return "";
+		if (errno == ENOTSOCK) {
+			hbuf[0] = '\0';
+			return hbuf;
+		}
 		log_error("getsockname");
 		return NULL;
 	}
@@ -127,7 +130,6 @@ struct passwd *virtual_userpass(char *user, char *pass, int *known)
 	}
 	free(pathname);
 
-	if (!(address = strdup(address))) return NULL;
 	virtual_domain = address;
 
 	pathname = concat(VIRTUAL_HOME_PATH, "/", address, "/",

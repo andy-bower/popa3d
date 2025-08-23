@@ -40,6 +40,15 @@ extern int dual_stack;
 
 typedef volatile sig_atomic_t va_int;
 
+struct ip_addr {
+	sa_family_t af;
+	socklen_t len;
+	union {
+		struct in_addr sin_addr;
+		struct in6_addr sin6_addr;
+	} a;
+};
+
 /*
  * Active POP sessions.  Those that were started within the last MIN_DELAY
  * seconds are also considered active (regardless of their actual state),
@@ -47,7 +56,7 @@ typedef volatile sig_atomic_t va_int;
  * information about sessions that we could have allowed to proceed.
  */
 static struct {
-	char addr[NI_MAXHOST];		/* Source IP address */
+	struct ip_addr addr;		/* Source IP address */
 	volatile int pid;		/* PID of the server, or 0 for none */
 	clock_t start;			/* When the server was started */
 	clock_t log;			/* When we've last logged a failure */
@@ -105,6 +114,25 @@ static void check_access(int sock)
 }
 #endif
 
+static void save_ip_addr(struct ip_addr *to,
+			 const struct sockaddr *from)
+{
+	to->af = from->sa_family;
+	if (to->af == AF_INET6) {
+		to->a.sin6_addr = ((struct sockaddr_in6 *) from)->sin6_addr;
+		to->len = sizeof to->a.sin6_addr;
+	} else {
+		to->a.sin_addr = ((struct sockaddr_in *) from)->sin_addr;
+		to->len = sizeof to->a.sin_addr;
+	}
+}
+
+static int cmp_ip_addr(const struct ip_addr *a,
+		       const struct ip_addr *b)
+{
+	return memcmp(a, b, ((size_t)&((struct ip_addr *)(0))->a) + a->len);
+}
+
 #if POP_OPTIONS
 int do_standalone(void)
 #else
@@ -116,6 +144,7 @@ int main(void)
 	int sock, new;
 	struct sockaddr_storage addr;
 	socklen_t addrlen;
+	struct ip_addr peer;
 	int pid;
 	struct tms buf;
 	clock_t min_delay, now, log;
@@ -208,12 +237,6 @@ int main(void)
 		addrlen = sizeof(addr);
 		new = accept(sock, (struct sockaddr *)&addr, &addrlen);
 
-		error = getnameinfo((struct sockaddr *)&addr, addrlen,
-		    hbuf, sizeof(hbuf), NULL, 0, NI_NUMERICHOST);
-		if (error)
-			; /* XXX */
-
-
 /*
  * I wish there were a portable way to classify errno's...  In this case,
  * it appears to be better to risk eating up the CPU on a fatal error
@@ -221,6 +244,17 @@ int main(void)
  * temporary error having to do with one particular connection attempt.
  */
 		if (new < 0) continue;
+
+		error = getnameinfo((struct sockaddr *)&addr, addrlen,
+				    hbuf, sizeof(hbuf),
+				    NULL, 0, NI_NUMERICHOST);
+		if (error) {
+			log_error("getnameinfo");
+			/* If rendering the numerical address failed,
+			 * no good can come of accepting it! */
+			continue;
+		}
+		save_ip_addr(&peer, (struct sockaddr *) &addr);
 
 		now = times(&buf);
 		if (!now) now = 1;
@@ -234,7 +268,7 @@ int main(void)
 			if (sessions[i].pid ||
 			    (sessions[i].start &&
 			    now - sessions[i].start < min_delay)) {
-				if (strcmp(sessions[i].addr, hbuf) == 0)
+				if (cmp_ip_addr(&sessions[i].addr, &peer) == 0)
 					if (++n >= MAX_SESSIONS_PER_SOURCE)
 						break;
 			} else
@@ -283,8 +317,7 @@ int main(void)
 			return do_pop_session();
 
 		default:
-			strlcpy(sessions[j].addr, hbuf,
-				sizeof(sessions[j].addr));
+			sessions[j].addr = peer;
 			sessions[j].pid = pid;
 			sessions[j].start = now;
 			sessions[j].log = 0;

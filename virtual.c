@@ -6,7 +6,7 @@
 
 #if POP_VIRTUAL
 
-#define _XOPEN_SOURCE 4
+/* Inhibits NI_MAXHOST definition if present: #define _XOPEN_SOURCE 4 */
 #define _XOPEN_SOURCE_EXTENDED
 #define _XOPEN_VERSION 4
 #define _XPG4_2
@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netdb.h>
 #include <arpa/inet.h>
 
 #ifndef NAME_MAX
@@ -57,7 +58,7 @@ static const char *lookup(void)
 	error = getnameinfo((struct sockaddr *)&ss, length, hbuf, sizeof(hbuf),
 	    NULL, 0, NI_NUMERICHOST);
 	if (error) {
-		/* logging? */
+		log_error("getnameinfo");
 		return NULL;
 	}
 
